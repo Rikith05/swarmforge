@@ -1,0 +1,56 @@
+name: SwarmForge CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install SwarmForge
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Syntax check frontend JavaScript modules
+        run: |
+          node --check swarmforge/web/dag.js
+          node --check swarmforge/web/views.js
+          node --check swarmforge/web/app.js
+
+      - name: Run full test suite
+        run: pytest -v
+
+      - name: Run strict Eval Arena gate
+        run: swarmforge eval --policy strict --strict --export eval-report.json
+
+      - name: Self-scan SwarmForge codebase
+        run: swarmforge scan . --policy strict --export self-audit.md
+
+      - name: Upload CI verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarmforge-reports-${{ matrix.python-version }}
+          path: |
+            eval-report.json
+            self-audit.md

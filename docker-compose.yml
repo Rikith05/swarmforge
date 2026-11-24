@@ -1,0 +1,16 @@
+services:
+  swarmforge:
+    build: .
+    ports:
+      - "8765:8765"
+    environment:
+      - SWARMFORGE_DB_PATH=/data/swarmforge.db
+      # Optional BYOK keys:
+      # - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - swarmforge_data:/data
+
+volumes:
+  swarmforge_data:

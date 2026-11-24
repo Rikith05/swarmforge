@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swarmforge"
+version = "0.1.0"
+description = "Autonomous Multi-Agent DAG Orchestrator, Tool Policy Firewall, and Time-Travel Eval Studio"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+  {name = "Rikith05"}
+]
+keywords = ["ai-agents", "multi-agent", "orchestration", "guardrails", "evals", "dag", "fastapi"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn>=0.30.0",
+  "pydantic>=2.7.0",
+  "httpx>=0.27.0",
+  "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+swarmforge = "swarmforge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["swarmforge*"]
+
+[tool.setuptools.package-data]
+swarmforge = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
