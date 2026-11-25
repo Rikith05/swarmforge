@@ -138,15 +138,19 @@ def create_app(db_path: Path | str | None = None, seed_demo: bool = True) -> Fas
             finally:
                 await queue.put(None)
 
-        asyncio.create_task(runner())
+        runner_task = asyncio.create_task(runner())
 
         async def event_generator():
-            while True:
-                item = await queue.get()
-                if item is None:
-                    break
-                ev_name, payload = item
-                yield f"event: {ev_name}\ndata: {payload}\n\n"
+            try:
+                while True:
+                    item = await queue.get()
+                    if item is None:
+                        break
+                    ev_name, payload = item
+                    yield f"event: {ev_name}\ndata: {payload}\n\n"
+            finally:
+                if not runner_task.done():
+                    runner_task.cancel()
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
 

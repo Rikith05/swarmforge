@@ -179,6 +179,18 @@ MISSION_CATALOG: dict[str, dict[str, Any]] = {
         "simulate_policy_probe": True,
         "virtual_files": _build_firewall_stress_files(),
     },
+    "custom-target-audit": {
+        "mission_id": "custom-target-audit",
+        "title": "Custom Target Audit (Local Path or Pasted Spec)",
+        "subtitle": "Audit only your supplied local directory, file, or pasted code/prompt snippet without demo fixtures.",
+        "objective": (
+            "Inspect the user-provided target workspace or code snippet for AST complexity, unsafe sinks, "
+            "prompt-injection surfaces, and remediation patches under Policy Firewall enforcement."
+        ),
+        "expected_findings": [],
+        "simulate_policy_probe": False,
+        "virtual_files": {},
+    },
 }
 
 

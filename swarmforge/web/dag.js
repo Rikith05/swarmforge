@@ -58,17 +58,25 @@ window.SwarmDAG = (function () {
       </defs>`,
     ];
 
+    const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
     for (const e of edges || []) {
       const a = pos[e.source];
       const b = pos[e.target];
       if (!a || !b) continue;
+      const srcNode = nodeMap[e.source];
+      const tgtNode = nodeMap[e.target];
+      const isLiveEdge =
+        tgtNode && (tgtNode.status === "running" || tgtNode.status === "retrying" || tgtNode.status === "blocked_by_policy");
+      const isVerifiedEdge = srcNode?.status === "verified" && tgtNode?.status === "verified";
+      const edgeStroke = isLiveEdge ? "#22d3ee" : isVerifiedEdge ? "#10b981" : "#2b4c70";
+      const edgeClass = isLiveEdge ? "edge-active" : "";
       const x1 = a.x + a.w;
       const y1 = a.y + a.h / 2;
       const x2 = b.x;
       const y2 = b.y + b.h / 2;
       const cx = (x1 + x2) / 2;
       parts.push(
-        `<path d="M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}" fill="none" stroke="#2b4c70" stroke-width="2" marker-end="url(#sf-arrow)" />`
+        `<path d="M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}" fill="none" stroke="${edgeStroke}" stroke-width="${isLiveEdge ? 2.4 : 2}" class="${edgeClass}" marker-end="url(#sf-arrow)" />`
       );
     }
 

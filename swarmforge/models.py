@@ -169,6 +169,9 @@ class RunRecord(BaseModel):
     strategy: StrategyMode
     policy_mode: PolicyMode
     provider: ProviderName
+    rules: PolicyRuleConfig = Field(default_factory=PolicyRuleConfig)
+    target_path: str | None = None
+    target_code: str | None = None
     status: str = "running"
     parent_run_id: str | None = None
     forked_from_seq: int | None = None

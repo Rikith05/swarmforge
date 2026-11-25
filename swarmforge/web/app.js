@@ -4,6 +4,7 @@
   const esc = window.SwarmDAG.esc;
 
   let missions = [];
+  let providerFlags = {};
   let currentRun = null;
   let currentNodes = [];
   let currentEdges = [];
@@ -183,6 +184,7 @@
       const node = currentNodes.find((n) => n.id === ev.node_id);
       if (node) {
         if (ev.event_type === "node_started") node.status = "running";
+        if (ev.event_type === "firewall_decision" && ev.detail?.action === "block") node.status = "blocked_by_policy";
         if (ev.event_type === "self_heal_triggered") node.status = "retrying";
         if (ev.event_type === "node_completed") {
           node.status = "verified";
@@ -274,30 +276,56 @@
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
         const chunks = buffer.split("\n\n");
         buffer = chunks.pop() || "";
         for (const chunk of chunks) {
           const lines = chunk.split("\n");
           let evName = "message";
-          let dataLine = "";
+          const dataLines = [];
           for (const line of lines) {
             if (line.startsWith("event:")) evName = line.slice(6).trim();
-            if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+            if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
           }
-          if (!dataLine) continue;
-          const parsed = JSON.parse(dataLine);
+          if (!dataLines.length) continue;
+          const parsed = JSON.parse(dataLines.join("\n"));
           if (evName === "run_event") applyLiveEvent(parsed);
           if (evName === "run_done" && parsed.run) hydrateCompletedRun(parsed.run);
+          if (evName === "run_error") throw new Error(parsed.error || "Stream failed");
         }
       }
-      await window.SwarmViews.loadRunsIntoSelectors();
+      await window.SwarmViews.loadRunsIntoSelectors(currentRun?.run_id);
     } catch (err) {
       document.getElementById("metric-status").textContent = "ERROR";
       trace.innerHTML = `<div class="event-card ev-block"><div class="event-title">Run failed: ${esc(err.message)}</div></div>`;
     } finally {
       launchBtn.disabled = false;
       launchBtn.textContent = "Launch Autonomous Swarm";
+    }
+  }
+
+  async function loadRunOntoStudio(runId) {
+    const trace = document.getElementById("subtab-trace");
+    const fwFeed = document.getElementById("subtab-fwfeed");
+    if (trace) trace.innerHTML = "";
+    if (fwFeed) fwFeed.innerHTML = "";
+    firewallEventsCount = 0;
+    const fwBadge = document.getElementById("fw-count-badge");
+    if (fwBadge) fwBadge.textContent = "0";
+
+    const [fullResp, evResp] = await Promise.all([
+      fetch(`/api/runs/${encodeURIComponent(runId)}`),
+      fetch(`/api/runs/${encodeURIComponent(runId)}/events`),
+    ]);
+    if (evResp.ok) {
+      const evData = await evResp.json();
+      for (const ev of evData.events || []) {
+        appendEventCard(ev);
+      }
+    }
+    if (fullResp.ok) {
+      const full = await fullResp.json();
+      if (full.run) hydrateCompletedRun(full.run);
     }
   }
 
@@ -315,8 +343,28 @@
 
     if (healthResp.ok) {
       const h = await healthResp.json();
+      providerFlags = h.providers || {};
       document.getElementById("health-pill").textContent = `Online v${h.version}`;
     }
+
+    const provSel = document.getElementById("provider-select");
+    const provHint = document.getElementById("provider-hint");
+    const keyInput = document.getElementById("api-key-input");
+    const updateProviderHint = () => {
+      if (!provSel || !provHint) return;
+      const p = provSel.value;
+      document.getElementById("provider-pill").textContent = p;
+      if (p === "local-engine") {
+        provHint.textContent = "Zero-key local deterministic AST + guardrail reasoning active.";
+      } else if (providerFlags[p] || (keyInput && keyInput.value.trim())) {
+        provHint.textContent = `Live ${p} inference ready.`;
+      } else {
+        provHint.textContent = `No env key detected for ${p}; supply a key above or SwarmForge will gracefully fall back.`;
+      }
+    };
+    provSel?.addEventListener("change", updateProviderHint);
+    keyInput?.addEventListener("input", updateProviderHint);
+    updateProviderHint();
 
     if (missionsResp.ok) {
       const mData = await missionsResp.json();
@@ -339,24 +387,15 @@
       const rData = await runsResp.json();
       const firstRun = (rData.runs || [])[0];
       if (firstRun) {
-        const [fullResp, evResp] = await Promise.all([
-          fetch(`/api/runs/${encodeURIComponent(firstRun.run_id)}`),
-          fetch(`/api/runs/${encodeURIComponent(firstRun.run_id)}/events`),
-        ]);
-        if (evResp.ok) {
-          const evData = await evResp.json();
-          for (const ev of evData.events || []) {
-            appendEventCard(ev);
-          }
-        }
-        if (fullResp.ok) {
-          const full = await fullResp.json();
-          if (full.run) hydrateCompletedRun(full.run);
-        }
+        await loadRunOntoStudio(firstRun.run_id);
       }
     }
 
-    await window.SwarmViews.loadRunsIntoSelectors();
+    await window.SwarmViews.loadRunsIntoSelectors(currentRun?.run_id);
+
+    document.getElementById("history-run-select")?.addEventListener("change", (e) => {
+      if (e.target.value) loadRunOntoStudio(e.target.value);
+    });
 
     document.getElementById("launch-btn")?.addEventListener("click", launchMission);
     document.getElementById("export-md-btn")?.addEventListener("click", () => {

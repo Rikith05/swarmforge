@@ -22,7 +22,7 @@ class TestSwarmForgeAPI(unittest.TestCase):
                 self.assertEqual(health["status"], "ok")
 
                 missions = client.get("/api/missions").json()
-                self.assertEqual(len(missions["missions"]), 4)
+                self.assertGreaterEqual(len(missions["missions"]), 4)
 
                 runs = client.get("/api/runs").json()["runs"]
                 self.assertEqual(len(runs), 2)

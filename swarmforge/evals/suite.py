@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from swarmforge.engine.orchestrator import SwarmOrchestrator
+from swarmforge.engine.orchestrator import SwarmOrchestrator, compute_expected_recall
 from swarmforge.models import (
     EvalCaseResult,
     EvalSuiteReport,
@@ -36,12 +36,13 @@ class EvalArena:
             StrategyMode.PLAN_EXECUTE,
             StrategyMode.COUNCIL_JUDGE,
         ]
-        chosen_missions = mission_ids or list(MISSION_CATALOG.keys())
+        chosen_missions = mission_ids or [
+            mid for mid in MISSION_CATALOG.keys() if mid != "custom-target-audit"
+        ]
         results: list[EvalCaseResult] = []
 
         for mid in chosen_missions:
             mission_def = MISSION_CATALOG[mid]
-            expected = set(mission_def.get("expected_findings", []))
             for strategy in chosen_strategies:
                 run = await self.orchestrator.execute_mission(
                     MissionRequest(
@@ -52,17 +53,17 @@ class EvalArena:
                     ),
                     pace_ms=0,
                 )
-                discovered = {f.get("code") for f in run.findings if f.get("code")}
-                if run.nodes and run.status == "completed":
-                    discovered.add("AST_COMPLEXITY_REPORT")
-                    discovered.add("DEPENDENCY_MAP")
-                if run.firewall_blocks > 0:
-                    discovered.add("RBAC_DENIED")
-                    discovered.add("PROMPT_INJECTION_BLOCKED")
-                if run.firewall_redactions > 0 or run.self_heals > 1:
-                    discovered.add("DLP_SECRET_DETECTED")
-
-                recall = 100.0 if not expected else round(100.0 * len(expected & discovered) / len(expected), 1)
+                events = self.db.get_events(run.run_id)
+                last_fw_events = (events[-1].blackboard_snapshot or {}).get("firewall_events", []) if events else []
+                has_inv = bool(events and (events[-1].blackboard_snapshot or {}).get("inventory", {}).get("file_count", 0) > 0)
+                recall, _ = compute_expected_recall(
+                    mission_def=mission_def,
+                    findings=run.findings,
+                    has_inventory=has_inv or (run.nodes and run.status == "completed"),
+                    firewall_blocks=run.firewall_blocks,
+                    firewall_redactions=run.firewall_redactions,
+                    firewall_events=last_fw_events,
+                )
                 verdict = run.judge
                 results.append(
                     EvalCaseResult(

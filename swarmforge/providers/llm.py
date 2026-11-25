@@ -56,8 +56,15 @@ class ProviderClient:
                 "mode": "local-deterministic",
             }
 
-        live_text = await self._call_remote(prompt)
-        text = live_text if live_text else f"{fallback_summary} (fallback: provider key unavailable)"
+        live_text, err_reason = await self._call_remote(prompt)
+        if live_text:
+            text = live_text
+            mode = self.provider.value
+        else:
+            reason = err_reason or "provider unavailable"
+            text = f"{fallback_summary} (fallback: {reason})"
+            mode = "local-fallback"
+
         tokens_out = _estimate_tokens(text)
         rate = 0.0000025 if self.provider != ProviderName.OLLAMA else 0.0
         return {
@@ -65,13 +72,13 @@ class ProviderClient:
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
             "cost_usd": round((tokens_in + tokens_out) * rate, 6),
-            "mode": self.provider.value if live_text else "local-fallback",
+            "mode": mode,
         }
 
-    async def _call_remote(self, prompt: str) -> str | None:
+    async def _call_remote(self, prompt: str) -> tuple[str | None, str | None]:
         key = self._resolve_key()
         if self.provider != ProviderName.OLLAMA and not key:
-            return None
+            return None, "provider key not configured"
 
         try:
             async with httpx.AsyncClient(timeout=18.0) as client:
@@ -85,7 +92,7 @@ class ProviderClient:
                     )
                     resp.raise_for_status()
                     data = resp.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                    return data["candidates"][0]["content"]["parts"][0]["text"], None
 
                 if self.provider == ProviderName.OPENAI:
                     model = self.model or "gpt-4o-mini"
@@ -99,7 +106,7 @@ class ProviderClient:
                         },
                     )
                     resp.raise_for_status()
-                    return resp.json()["choices"][0]["message"]["content"]
+                    return resp.json()["choices"][0]["message"]["content"], None
 
                 if self.provider == ProviderName.ANTHROPIC:
                     model = self.model or "claude-3-5-haiku-latest"
@@ -116,7 +123,7 @@ class ProviderClient:
                         },
                     )
                     resp.raise_for_status()
-                    return resp.json()["content"][0]["text"]
+                    return resp.json()["content"][0]["text"], None
 
                 if self.provider == ProviderName.OLLAMA:
                     base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
@@ -126,7 +133,11 @@ class ProviderClient:
                         json={"model": model, "prompt": prompt, "stream": False},
                     )
                     resp.raise_for_status()
-                    return resp.json().get("response")
-        except Exception:
-            return None
-        return None
+                    return resp.json().get("response"), None
+        except httpx.HTTPStatusError as exc:
+            return None, f"HTTP {exc.response.status_code} from {self.provider.value}"
+        except httpx.TimeoutException:
+            return None, f"timeout calling {self.provider.value}"
+        except Exception as exc:
+            return None, f"{type(exc).__name__} calling {self.provider.value}"
+        return None, "unsupported provider"

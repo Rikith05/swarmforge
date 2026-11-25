@@ -76,6 +76,16 @@ _SECRET_RULES: list[tuple[str, re.Pattern[str], str]] = [
         "API secret key token pattern detected in tool arguments.",
     ),
     (
+        "DLP_GEMINI_KEY",
+        re.compile(r"\bAI" + r"za[0-9A-Za-z\-_]{30,}\b"),
+        "Google/Gemini API key pattern detected in tool arguments.",
+    ),
+    (
+        "DLP_CONN_STRING",
+        re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s]+:[^@\s]+@[^\s]+", re.IGNORECASE),
+        "Database connection URI with embedded credentials detected.",
+    ),
+    (
         "DLP_SSN_PII",
         re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
         "US SSN PII pattern detected in tool arguments.",
@@ -94,10 +104,15 @@ _INJECTION_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     (
         "INJ_EXFIL",
         re.compile(
-            r"(exfiltrate|send\s+(?:all\s+)?secrets\s+to|upload\s+\.env|print\s+system\s+prompt)",
+            r"(\bexfiltrate\s+(?:all\s+)?(?:secrets|keys|data|tokens|files|\.env)|send\s+(?:all\s+)?secrets\s+to|upload\s+\.env|print\s+system\s+prompt)",
             re.IGNORECASE,
         ),
         "Instruction-driven data exfiltration attempt detected.",
+    ),
+    (
+        "INJ_ROLE_HIJACK",
+        re.compile(r"(?:<\|im_start\|>\s*system|\[INST\]|###\s*SYSTEM\s+OVERRIDE)", re.IGNORECASE),
+        "Control-token / role-delimiter hijacking payload detected.",
     ),
     (
         "INJ_HIDDEN_TAG",
@@ -115,17 +130,35 @@ _SANDBOX_CMD_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     (
         "SANDBOX_DESTRUCTIVE_CMD",
         re.compile(
-            r"(rm\s+-rf\s+[/~\\]|curl\s+[^|\n]+\|\s*(?:sh|bash)|wget\s+[^|\n]+\|\s*sh|Invoke-Expression|powershell\s+-enc(?:odedcommand)?|chmod\s+777\s+/)",
+            r"(rm\s+-rf\s+[/~\\]|curl\s+[^|\n]+\|\s*(?:sh|bash)|wget\s+[^|\n]+\|\s*sh|base64\s+-d\s*\|\s*(?:sh|bash)|Invoke-Expression|powershell\s+-enc(?:odedcommand)?|chmod\s+777\s+/)",
             re.IGNORECASE,
         ),
         "Destructive or remote-code-execution shell payload blocked.",
     ),
     (
         "SANDBOX_PATH_TRAVERSAL",
-        re.compile(r"(?:\.\.[/\\]){2,}|(?:^|[\s'\"])(?:/etc/passwd|/etc/shadow|\.ssh[/\\]id_rsa|C:\\Windows\\System32)", re.IGNORECASE),
+        re.compile(
+            r"((?:^|[\s'\"/\\])\.\.(?:[/\\]|$)|%2e%2e|/etc/passwd|/etc/shadow|\.ssh[/\\]id_rsa|\.aws[/\\]credentials|(?:^|[/\\])\.env(?:\.local)?(?:\s|$|['\"])|C:[/\\]Windows[/\\]System32)",
+            re.IGNORECASE,
+        ),
         "Path traversal or sensitive host credential path access blocked.",
     ),
 ]
+
+
+def is_sensitive_host_path(path_value: str) -> FirewallFinding | None:
+    """Return a FirewallFinding if a user/agent supplied path targets sensitive credentials or system files."""
+    if not path_value:
+        return None
+    for code, pattern, message in _SANDBOX_CMD_PATTERNS:
+        if code == "SANDBOX_PATH_TRAVERSAL" and pattern.search(path_value):
+            return FirewallFinding(
+                engine="filesystem_sandbox",
+                severity="critical",
+                code=code,
+                message=f"{message} (path: {path_value})",
+            )
+    return None
 
 _DESTRUCTIVE_TOOLS = {"shell_exec", "raw_http_post", "delete_files"}
 
@@ -194,12 +227,13 @@ class PolicyFirewall:
         self,
         agent_role: str,
         tool_name: str,
-        arguments: dict[str, Any],
+        arguments: dict[str, Any] | None,
         spent_budget_usd: float = 0.0,
     ) -> FirewallDecision:
         started = time.perf_counter()
+        safe_args = arguments if isinstance(arguments, dict) else {}
         findings: list[FirewallFinding] = []
-        sanitized = copy.deepcopy(arguments)
+        sanitized = copy.deepcopy(safe_args)
         should_block = False
         did_redact = False
 
@@ -229,7 +263,7 @@ class PolicyFirewall:
                     should_block = True
 
         # 3. Prompt Injection & Tool Poisoning Guard
-        all_strings = _walk_strings(arguments)
+        all_strings = _walk_strings(safe_args)
         if self.rules.prompt_injection_guard:
             for field_path, text in all_strings:
                 for code, pattern, message in _INJECTION_PATTERNS:
@@ -265,7 +299,7 @@ class PolicyFirewall:
         if self.rules.loop_budget_breaker:
             self._hop_count += 1
             sig_payload = json.dumps(
-                {"role": agent_role, "tool": tool_name, "args": arguments},
+                {"role": agent_role, "tool": tool_name, "args": safe_args},
                 sort_keys=True,
                 default=str,
             )

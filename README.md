@@ -80,39 +80,38 @@ Latest verified strict-policy benchmark run (`swarmforge eval --policy strict --
 
 ## Quickstart
 
-### Local Installation & Studio Launch
+### 1-Click Studio Website (Operate for Everyone)
 
-```bash
-git clone https://github.com/Rikith05/swarmforge.git
-cd swarmforge
-pip install -e ".[dev]"
-swarmforge serve --port 8765
-```
+Anyone can run and operate the full Web Studio instantly:
 
-Open **http://127.0.0.1:8765** to explore:
+- **Windows**: Double-click `start_website.bat` or run:
+  ```bash
+  python run_studio.py
+  ```
+- **macOS / Linux**:
+  ```bash
+  chmod +x start_website.sh
+  ./start_website.sh
+  ```
+- **Using SwarmForge CLI**:
+  ```bash
+  swarmforge serve --host 0.0.0.0 --port 8765
+  ```
+
+This starts the server on `0.0.0.0:8765`, automatically opens your browser at **http://localhost:8765**, and prints your local LAN address so **anyone on your network can access and operate it**.
+
+Open **http://127.0.0.1:8765** to operate:
 - **Orchestrator** — interactive animated SVG DAG, live SSE stream, node inspector, findings, colored unified diffs, and `.md` export
 - **Time-Travel & Diff** — step scrubber, blackboard state snapshots, checkpoint forking, and side-by-side run comparison
 - **Policy Firewall Lab** — instant guardrail payload tester & RBAC capability matrix
 - **Eval Arena** — 1-click 12-run benchmark matrix with downloadable JSON reports
 
-### CLI Commands
-
-```bash
-# Run an autonomous security audit mission and export a Markdown report
-swarmforge run --mission agent-security-audit --strategy council_judge --policy strict --export audit.md
-
-# Scan any local repository directory
-swarmforge scan ./path/to/repo --policy strict --export repo-audit.md
-
-# Execute the Eval Arena strict CI gate
-swarmforge eval --policy strict --strict --export eval-report.json
-```
-
-### Docker
+### Docker & Docker Compose (Zero-Config Host)
 
 ```bash
 docker compose up --build
 ```
+Access the studio at `http://localhost:8765`.
 
 ### Optional Live LLM Providers (BYOK)
 

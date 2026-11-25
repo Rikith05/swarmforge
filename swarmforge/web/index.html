@@ -87,6 +87,7 @@
                 <input id="api-key-input" type="password" class="input" placeholder="Uses env or local-engine" autocomplete="off" />
               </div>
             </div>
+            <div id="provider-hint" class="helper-text" style="margin:4px 0 4px;"></div>
 
             <label class="field-label" for="target-path-input">Target Local Path (Optional)</label>
             <input id="target-path-input" type="text" class="input" placeholder="e.g. C:\path\to\repo (optional)" />
@@ -139,7 +140,10 @@
           <div class="dag-stage">
             <div class="dag-toolbar">
               <span class="muted" id="dag-run-label">Select a mission or click a node to inspect</span>
-              <button id="export-md-btn" class="btn btn-ghost btn-sm" disabled>Export Report (.md)</button>
+              <div class="inline-actions">
+                <select id="history-run-select" class="input input-compact" aria-label="Switch run history"></select>
+                <button id="export-md-btn" class="btn btn-ghost btn-sm" disabled>Export Report (.md)</button>
+              </div>
             </div>
             <svg id="dag-svg" class="dag-svg" viewBox="0 0 820 420" role="img" aria-label="Agent Execution DAG"></svg>
             <div id="node-inspector" class="node-inspector">
@@ -201,6 +205,8 @@
               <button id="fork-run-btn" class="btn btn-amber btn-sm">Fork &amp; Execute From Step</button>
             </div>
 
+            <div id="replay-node-strip" class="replay-node-strip"></div>
+
             <div class="two-col-equal">
               <div class="card">
                 <h3>Event Snapshot</h3>
@@ -244,7 +250,9 @@
               <button class="chip" data-fw-preset="rbac">RBAC Escalation (shell_exec)</button>
               <button class="chip" data-fw-preset="secret">Secret DLP Leak</button>
               <button class="chip" data-fw-preset="injection">Prompt Injection Smuggling</button>
+              <button class="chip" data-fw-preset="hijack">Role Hijack (&lt;|im_start|&gt;)</button>
               <button class="chip" data-fw-preset="traversal">Path Traversal (../../etc/passwd)</button>
+              <button class="chip" data-fw-preset="connstr">DB Credential URI</button>
               <button class="chip" data-fw-preset="safe">Compliant Tool Call</button>
             </div>
 

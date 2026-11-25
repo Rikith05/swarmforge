@@ -146,7 +146,7 @@ class SwarmDatabase:
             rows = conn.execute(
                 """
                 SELECT payload_json FROM runs
-                ORDER BY created_at DESC
+                ORDER BY created_at DESC, rowid DESC
                 LIMIT ?
                 """,
                 (limit,),
