@@ -24,7 +24,9 @@ htmlcov/
 *.key
 *.pem
 
-# IDE & OS
+# Executables & binaries
+*.exe
+cloudflared*
 .vscode/
 .idea/
 .DS_Store
